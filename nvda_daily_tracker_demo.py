@@ -86,8 +86,9 @@ def save_to_excel(stock_data, news_summary, filename='nvda_demo_tracker.xlsx'):
 
         # 같은 날짜가 있으면 업데이트, 없으면 추가
         if stock_data['date'] in existing_df['날짜'].values:
-            existing_df.loc[existing_df['날짜'] == stock_data['date']] = new_record.iloc[0]
-            df = existing_df
+            # 기존 레코드를 제거하고 새 레코드 추가
+            existing_df = existing_df[existing_df['날짜'] != stock_data['date']]
+            df = pd.concat([existing_df, new_record], ignore_index=True)
         else:
             df = pd.concat([existing_df, new_record], ignore_index=True)
     else:
