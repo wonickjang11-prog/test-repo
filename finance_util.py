@@ -82,7 +82,7 @@ def calculate_per_for_stocks(stocks_data):
     return pd.DataFrame(results)
 
 
-def export_to_excel(stocks_data, filename='stock_report.xlsx', output_dir=r'd:\목표 invest\1_목표_Inv'):
+def export_to_excel(stocks_data, filename='stock_report.xlsx', output_dir=None):
     """
     Calculate PER for multiple stocks and export to Excel file.
 
@@ -90,7 +90,7 @@ def export_to_excel(stocks_data, filename='stock_report.xlsx', output_dir=r'd:\�
         stocks_data (list): List of dictionaries containing stock information.
                            Each dictionary should have 'name', 'price', and 'eps' keys.
         filename (str): Output Excel filename (default: 'stock_report.xlsx')
-        output_dir (str): Output directory path (default: 'd:\목표 invest\1_목표_Inv')
+        output_dir (str): Output directory path (default: current directory)
 
     Returns:
         str: Path to the created Excel file
@@ -170,7 +170,7 @@ def fetch_daily_stock_data(symbol, date=None):
         }
 
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
             'Accept': 'application/json',
             'Accept-Language': 'en-US,en;q=0.9',
             'Accept-Encoding': 'gzip, deflate, br',
@@ -211,20 +211,34 @@ def fetch_daily_stock_data(symbol, date=None):
             raise ValueError(f"No data available for {symbol}")
 
         result = data['chart']['result'][0]
+
+        # Validate required structure
+        if 'timestamp' not in result:
+            raise ValueError(f"Invalid data structure for {symbol}: missing timestamp")
+        if 'indicators' not in result or 'quote' not in result['indicators'] or not result['indicators']['quote']:
+            raise ValueError(f"Invalid data structure for {symbol}: missing quote data")
+
         timestamps = result['timestamp']
         quotes = result['indicators']['quote'][0]
 
         if not timestamps:
             raise ValueError(f"No trading data available for {symbol}")
 
+        # Validate quote data has all required fields
+        required_fields = ['open', 'close', 'high', 'low', 'volume']
+        for field in required_fields:
+            if field not in quotes:
+                raise ValueError(f"Invalid data structure for {symbol}: missing {field} in quote data")
+
         # Convert timestamps to dates
         dates = [datetime.fromtimestamp(ts) for ts in timestamps]
 
-        # Find the closest date to target_date
+        # Find the most recent trading date on or before target_date
         target_idx = None
-        for i, dt in enumerate(dates):
-            if dt.date() <= target_date.date():
+        for i in range(len(dates) - 1, -1, -1):  # Search backwards for most recent
+            if dates[i].date() <= target_date.date():
                 target_idx = i
+                break
 
         if target_idx is None:
             raise ValueError(f"No trading data available on or before {target_date.strftime('%Y-%m-%d')}")
@@ -237,9 +251,22 @@ def fetch_daily_stock_data(symbol, date=None):
         low_price = quotes['low'][target_idx]
         volume = quotes['volume'][target_idx]
 
+        # Validate that critical price data is not None
+        if open_price is None:
+            raise ValueError(f"Missing open price data for {symbol} on {closest_date.strftime('%Y-%m-%d')}")
+        if close_price is None:
+            raise ValueError(f"Missing close price data for {symbol} on {closest_date.strftime('%Y-%m-%d')}")
+        if high_price is None:
+            raise ValueError(f"Missing high price data for {symbol} on {closest_date.strftime('%Y-%m-%d')}")
+        if low_price is None:
+            raise ValueError(f"Missing low price data for {symbol} on {closest_date.strftime('%Y-%m-%d')}")
+
         # Get previous close
         if target_idx > 0:
             prev_close_price = quotes['close'][target_idx - 1]
+            if prev_close_price is None:
+                # Fallback to open price if previous close is not available
+                prev_close_price = open_price
         else:
             prev_close_price = open_price
 
@@ -253,7 +280,7 @@ def fetch_daily_stock_data(symbol, date=None):
             'close': round(close_price, 2),
             'high': round(high_price, 2),
             'low': round(low_price, 2),
-            'volume': int(volume) if volume else 0,
+            'volume': int(volume) if volume is not None else 0,
             'change': round(change, 2),
             'change_pct': round(change_pct, 2),
             'prev_close': round(prev_close_price, 2)
@@ -317,7 +344,7 @@ def fetch_stock_news(symbol, date=None, max_results=5):
         }
 
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
             'Accept': 'application/xml,text/xml,application/rss+xml',
             'Accept-Language': 'en-US,en;q=0.9'
         }
