@@ -7,6 +7,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import requests
 import json
+import time
 
 
 def calculate_per(stock_price, eps):
@@ -150,8 +151,12 @@ def fetch_daily_stock_data(symbol, date=None):
     else:
         raise ValueError("Date must be a string (YYYY-MM-DD) or datetime object")
 
+    # Retry logic with exponential backoff
+    max_retries = 4
+    retry_delays = [2, 4, 8, 16]  # seconds
+
     try:
-        # Use Yahoo Finance V7 API
+        # Use Yahoo Finance V8 API
         # Get data for a week to ensure we have previous close
         start_timestamp = int((target_date - timedelta(days=7)).timestamp())
         end_timestamp = int((target_date + timedelta(days=1)).timestamp())
@@ -165,11 +170,40 @@ def fetch_daily_stock_data(symbol, date=None):
         }
 
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Cache-Control': 'no-cache'
         }
 
-        response = requests.get(url, params=params, headers=headers, timeout=10)
-        response.raise_for_status()
+        response = None
+        last_error = None
+
+        # Attempt with retries
+        for attempt in range(max_retries + 1):
+            try:
+                if attempt > 0:
+                    delay = retry_delays[attempt - 1]
+                    print(f"⏳ Retry {attempt}/{max_retries} after {delay}s...")
+                    time.sleep(delay)
+
+                response = requests.get(url, params=params, headers=headers, timeout=15)
+                response.raise_for_status()
+                break  # Success, exit retry loop
+
+            except requests.exceptions.RequestException as e:
+                last_error = e
+                if attempt < max_retries:
+                    print(f"⚠️  Network error on attempt {attempt + 1}: {type(e).__name__}")
+                    continue
+                else:
+                    # All retries exhausted
+                    raise ValueError(f"Network error fetching data for {symbol} after {max_retries} retries: {str(e)}")
+
+        if response is None:
+            raise ValueError(f"Failed to fetch data for {symbol} after {max_retries} retries")
 
         data = response.json()
 
@@ -225,12 +259,12 @@ def fetch_daily_stock_data(symbol, date=None):
             'prev_close': round(prev_close_price, 2)
         }
 
-    except requests.exceptions.RequestException as e:
-        raise ValueError(f"Network error fetching data for {symbol}: {str(e)}")
     except (KeyError, IndexError, TypeError) as e:
         raise ValueError(f"Error parsing data for {symbol}: {str(e)}")
+    except ValueError:
+        raise  # Re-raise ValueError from above
     except Exception as e:
-        raise ValueError(f"Error fetching data for {symbol}: {str(e)}")
+        raise ValueError(f"Unexpected error fetching data for {symbol}: {str(e)}")
 
 
 def fetch_stock_news(symbol, date=None, max_results=5):
@@ -256,6 +290,10 @@ def fetch_stock_news(symbol, date=None, max_results=5):
     if not symbol:
         raise ValueError("Symbol cannot be empty")
 
+    # Retry logic with exponential backoff
+    max_retries = 4
+    retry_delays = [2, 4, 8, 16]  # seconds
+
     try:
         # Map symbol to company name for better search results
         company_names = {
@@ -279,11 +317,33 @@ def fetch_stock_news(symbol, date=None, max_results=5):
         }
 
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/xml,text/xml,application/rss+xml',
+            'Accept-Language': 'en-US,en;q=0.9'
         }
 
-        response = requests.get(url, params=params, headers=headers, timeout=10)
-        response.raise_for_status()
+        response = None
+
+        # Attempt with retries
+        for attempt in range(max_retries + 1):
+            try:
+                if attempt > 0:
+                    delay = retry_delays[attempt - 1]
+                    time.sleep(delay)
+
+                response = requests.get(url, params=params, headers=headers, timeout=15)
+                response.raise_for_status()
+                break  # Success, exit retry loop
+
+            except requests.exceptions.RequestException:
+                if attempt >= max_retries:
+                    # All retries exhausted, return empty list
+                    print(f"Warning: Could not fetch news for {symbol} after {max_retries} retries")
+                    return []
+                continue
+
+        if response is None:
+            return []
 
         # Parse XML
         from xml.etree import ElementTree as ET
