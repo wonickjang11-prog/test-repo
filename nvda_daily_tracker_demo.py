@@ -1,53 +1,15 @@
 #!/usr/bin/env python3
 """
-NVIDIA Daily Stock Tracker - Demo Version
+NVIDIA Daily Stock Tracker - Real-time Version
 
-이 데모 버전은 샘플 데이터를 사용하여 네트워크 연결 없이 추적기의 작동 방식을 보여줍니다.
+실시간 Yahoo Finance API를 사용하여 실제 NVIDIA 주가 데이터를 가져옵니다.
 """
 
 import sys
 from datetime import datetime
 import pandas as pd
 import os
-
-
-def get_sample_stock_data():
-    """샘플 주가 데이터 반환 (2026년 1월 16일 기준)"""
-    return {
-        'date': '2026-01-16',
-        'prev_close': 142.50,
-        'open': 143.20,
-        'close': 145.80,
-        'high': 146.50,
-        'low': 142.80,
-        'volume': 45230000,
-        'change': 3.30,
-        'change_pct': 2.32
-    }
-
-
-def get_sample_news():
-    """샘플 뉴스 데이터 반환"""
-    return [
-        {
-            'title': 'NVIDIA Announces New AI Chip Architecture',
-            'publisher': 'Reuters',
-            'link': 'https://example.com/news1',
-            'published': '2026-01-16 09:30:00'
-        },
-        {
-            'title': 'China Market Access Boosts NVIDIA Stock',
-            'publisher': 'Bloomberg',
-            'link': 'https://example.com/news2',
-            'published': '2026-01-16 10:15:00'
-        },
-        {
-            'title': 'Data Center Demand Drives NVIDIA Growth',
-            'publisher': 'CNBC',
-            'link': 'https://example.com/news3',
-            'published': '2026-01-16 11:00:00'
-        }
-    ]
+from finance_util import fetch_daily_stock_data, fetch_stock_news
 
 
 def format_news_summary(news_items):
@@ -104,16 +66,18 @@ def save_to_excel(stock_data, news_summary, filename='nvda_demo_tracker.xlsx'):
 
 
 def track_nvda_demo():
-    """NVIDIA 주가 추적 데모 실행"""
+    """NVIDIA 주가 추적 실행 (실시간 데이터)"""
     print("=" * 60)
-    print("NVIDIA 일일 주가 추적기 (데모 버전)")
+    print("NVIDIA 일일 주가 추적기 (실시간 버전)")
     print("=" * 60)
-    print("\n📊 샘플 데이터를 사용하여 추적 기능을 시연합니다.\n")
+    print("\n📊 Yahoo Finance API에서 실시간 데이터를 가져옵니다.\n")
+
+    symbol = 'NVDA'
 
     try:
-        # 1. 샘플 주가 데이터 가져오기
+        # 1. 실제 주가 데이터 가져오기
         print("📊 NVIDIA(NVDA) 주가 데이터를 가져오는 중...")
-        stock_data = get_sample_stock_data()
+        stock_data = fetch_daily_stock_data(symbol)
 
         print(f"\n날짜: {stock_data['date']}")
         print(f"전일 종가: ${stock_data['prev_close']}")
@@ -132,15 +96,18 @@ def track_nvda_demo():
         else:
             print("➡️  보합")
 
-        # 2. 샘플 뉴스 가져오기
+        # 2. 실제 뉴스 가져오기
         print(f"\n📰 뉴스를 가져오는 중...")
-        news_items = get_sample_news()
+        news_items = fetch_stock_news(symbol, stock_data['date'])
 
-        print(f"\n총 {len(news_items)}개의 뉴스를 찾았습니다:")
-        for i, news in enumerate(news_items, 1):
-            print(f"{i}. [{news['publisher']}] {news['title']}")
-            print(f"   발행: {news['published']}")
-            print(f"   링크: {news['link']}")
+        if news_items:
+            print(f"\n총 {len(news_items)}개의 뉴스를 찾았습니다:")
+            for i, news in enumerate(news_items, 1):
+                print(f"{i}. [{news['publisher']}] {news['title']}")
+                print(f"   발행: {news['published']}")
+                print(f"   링크: {news['link']}")
+        else:
+            print("관련 뉴스를 찾지 못했습니다.")
 
         # 3. 뉴스 요약
         news_summary = format_news_summary(news_items)
@@ -160,13 +127,14 @@ def track_nvda_demo():
         print("\n" + "=" * 60)
         print("추적 완료!")
         print("=" * 60)
-        print("\n💡 실제 버전은 Yahoo Finance API에서 실시간 데이터를 가져옵니다.")
-        print("💡 nvda_daily_tracker.py 스크립트를 사용하세요.")
+        print("\n✅ Yahoo Finance API를 통해 실시간 데이터를 성공적으로 가져왔습니다.")
 
         return 0
 
     except Exception as e:
         print(f"\n❌ 오류 발생: {str(e)}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
         return 1
 
 
