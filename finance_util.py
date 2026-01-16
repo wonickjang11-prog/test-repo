@@ -122,5 +122,5 @@ if __name__ == "__main__":
 
     # Export to Excel
     print("\n=== Exporting to Excel ===")
-    output_file = export_to_excel(stocks)
+    output_file = export_to_excel(stocks, filename=r'd:\목표 invest\1_목표_Inv\stock_report.xlsx')
     print(f"Excel file created: {output_file}")
