@@ -1,9 +1,12 @@
 """
-Finance utility module for calculating financial ratios.
+Finance utility module for calculating financial ratios and tracking daily stock data.
 """
 
 import os
 import pandas as pd
+from datetime import datetime, timedelta
+import requests
+import json
 
 
 def calculate_per(stock_price, eps):
@@ -106,6 +109,305 @@ def export_to_excel(stocks_data, filename='stock_report.xlsx', output_dir=r'd:\�
     else:
         filepath = filename
 
+    df.to_excel(filepath, index=False, engine='openpyxl')
+    return filepath
+
+
+def fetch_daily_stock_data(symbol, date=None):
+    """
+    Fetch daily stock data for a given symbol using Yahoo Finance API.
+
+    Args:
+        symbol (str): Stock ticker symbol (e.g., 'NVDA')
+        date (str or datetime): Date to fetch data for (default: today)
+                               Format: 'YYYY-MM-DD' or datetime object
+
+    Returns:
+        dict: Dictionary containing daily stock data with keys:
+              - date: Trading date
+              - open: Opening price
+              - close: Closing price
+              - high: Highest price
+              - low: Lowest price
+              - volume: Trading volume
+              - change: Price change (close - prev_close)
+              - change_pct: Percentage change
+              - prev_close: Previous day's closing price
+
+    Raises:
+        ValueError: If symbol is invalid or data cannot be fetched
+    """
+    if not symbol:
+        raise ValueError("Symbol cannot be empty")
+
+    # Parse date
+    if date is None:
+        target_date = datetime.now()
+    elif isinstance(date, str):
+        target_date = datetime.strptime(date, '%Y-%m-%d')
+    elif isinstance(date, datetime):
+        target_date = date
+    else:
+        raise ValueError("Date must be a string (YYYY-MM-DD) or datetime object")
+
+    try:
+        # Use Yahoo Finance V7 API
+        # Get data for a week to ensure we have previous close
+        start_timestamp = int((target_date - timedelta(days=7)).timestamp())
+        end_timestamp = int((target_date + timedelta(days=1)).timestamp())
+
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+        params = {
+            'period1': start_timestamp,
+            'period2': end_timestamp,
+            'interval': '1d',
+            'includePrePost': 'false'
+        }
+
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+
+        response = requests.get(url, params=params, headers=headers, timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+
+        if 'chart' not in data or 'result' not in data['chart'] or not data['chart']['result']:
+            raise ValueError(f"No data available for {symbol}")
+
+        result = data['chart']['result'][0]
+        timestamps = result['timestamp']
+        quotes = result['indicators']['quote'][0]
+
+        if not timestamps:
+            raise ValueError(f"No trading data available for {symbol}")
+
+        # Convert timestamps to dates
+        dates = [datetime.fromtimestamp(ts) for ts in timestamps]
+
+        # Find the closest date to target_date
+        target_idx = None
+        for i, dt in enumerate(dates):
+            if dt.date() <= target_date.date():
+                target_idx = i
+
+        if target_idx is None:
+            raise ValueError(f"No trading data available on or before {target_date.strftime('%Y-%m-%d')}")
+
+        # Get data for target date
+        closest_date = dates[target_idx]
+        open_price = quotes['open'][target_idx]
+        close_price = quotes['close'][target_idx]
+        high_price = quotes['high'][target_idx]
+        low_price = quotes['low'][target_idx]
+        volume = quotes['volume'][target_idx]
+
+        # Get previous close
+        if target_idx > 0:
+            prev_close_price = quotes['close'][target_idx - 1]
+        else:
+            prev_close_price = open_price
+
+        # Calculate changes
+        change = close_price - prev_close_price
+        change_pct = (change / prev_close_price * 100) if prev_close_price > 0 else 0
+
+        return {
+            'date': closest_date.strftime('%Y-%m-%d'),
+            'open': round(open_price, 2),
+            'close': round(close_price, 2),
+            'high': round(high_price, 2),
+            'low': round(low_price, 2),
+            'volume': int(volume) if volume else 0,
+            'change': round(change, 2),
+            'change_pct': round(change_pct, 2),
+            'prev_close': round(prev_close_price, 2)
+        }
+
+    except requests.exceptions.RequestException as e:
+        raise ValueError(f"Network error fetching data for {symbol}: {str(e)}")
+    except (KeyError, IndexError, TypeError) as e:
+        raise ValueError(f"Error parsing data for {symbol}: {str(e)}")
+    except Exception as e:
+        raise ValueError(f"Error fetching data for {symbol}: {str(e)}")
+
+
+def fetch_stock_news(symbol, date=None, max_results=5):
+    """
+    Fetch news for a given stock symbol using Google News RSS.
+
+    Args:
+        symbol (str): Stock ticker symbol (e.g., 'NVDA')
+        date (str or datetime): Date to fetch news for (default: today)
+                               Format: 'YYYY-MM-DD' or datetime object
+        max_results (int): Maximum number of news items to return (default: 5)
+
+    Returns:
+        list: List of dictionaries containing news items with keys:
+              - title: News headline
+              - publisher: News source
+              - link: URL to the news article
+              - published: Publication timestamp
+
+    Raises:
+        ValueError: If symbol is invalid or news cannot be fetched
+    """
+    if not symbol:
+        raise ValueError("Symbol cannot be empty")
+
+    try:
+        # Map symbol to company name for better search results
+        company_names = {
+            'NVDA': 'NVIDIA',
+            'AAPL': 'Apple',
+            'MSFT': 'Microsoft',
+            'GOOGL': 'Google',
+            'AMZN': 'Amazon',
+            'TSLA': 'Tesla',
+            'META': 'Meta'
+        }
+        search_term = company_names.get(symbol, symbol)
+
+        # Use Google News RSS feed
+        url = f"https://news.google.com/rss/search"
+        params = {
+            'q': f'{search_term} stock',
+            'hl': 'en-US',
+            'gl': 'US',
+            'ceid': 'US:en'
+        }
+
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+
+        response = requests.get(url, params=params, headers=headers, timeout=10)
+        response.raise_for_status()
+
+        # Parse XML
+        from xml.etree import ElementTree as ET
+        root = ET.fromstring(response.content)
+
+        # Parse date for filtering
+        if date is None:
+            target_date = datetime.now().date()
+        elif isinstance(date, str):
+            target_date = datetime.strptime(date, '%Y-%m-%d').date()
+        elif isinstance(date, datetime):
+            target_date = date.date()
+        else:
+            raise ValueError("Date must be a string (YYYY-MM-DD) or datetime object")
+
+        # Extract news items
+        news_items = []
+        for item in root.findall('.//item')[:max_results * 2]:
+            try:
+                title = item.find('title').text
+                link = item.find('link').text
+                pub_date_str = item.find('pubDate').text
+
+                # Parse publication date (RFC 822 format)
+                from email.utils import parsedate_to_datetime
+                pub_date = parsedate_to_datetime(pub_date_str)
+
+                # Extract publisher from source tag if available
+                source = item.find('source')
+                publisher = source.text if source is not None else 'Unknown'
+
+                # Filter by date (within 3 days of target)
+                if abs((pub_date.date() - target_date).days) <= 3:
+                    news_items.append({
+                        'title': title,
+                        'publisher': publisher,
+                        'link': link,
+                        'published': pub_date.strftime('%Y-%m-%d %H:%M:%S')
+                    })
+
+                if len(news_items) >= max_results:
+                    break
+            except (AttributeError, ValueError):
+                continue
+
+        return news_items
+
+    except requests.exceptions.RequestException as e:
+        # If news fetch fails, return empty list instead of raising error
+        print(f"Warning: Could not fetch news for {symbol}: {str(e)}")
+        return []
+    except Exception as e:
+        print(f"Warning: Error fetching news for {symbol}: {str(e)}")
+        return []
+
+
+def append_daily_record(stock_data, news_summary, filename='nvda_daily_tracker.xlsx', output_dir=None):
+    """
+    Append daily stock record to Excel file, creating it if it doesn't exist.
+
+    Args:
+        stock_data (dict): Dictionary containing stock data (from fetch_daily_stock_data)
+        news_summary (str): Summary of news/reasons for the day's price movement
+        filename (str): Output Excel filename (default: 'nvda_daily_tracker.xlsx')
+        output_dir (str): Output directory path (default: current directory)
+
+    Returns:
+        str: Path to the Excel file
+
+    Raises:
+        ValueError: If stock_data is invalid
+    """
+    if not stock_data:
+        raise ValueError("stock_data cannot be empty")
+
+    required_keys = ['date', 'open', 'close', 'high', 'low', 'volume', 'change', 'change_pct', 'prev_close']
+    for key in required_keys:
+        if key not in stock_data:
+            raise ValueError(f"stock_data must contain '{key}' key")
+
+    # Create output directory if it doesn't exist
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # Combine directory and filename
+    filepath = os.path.join(output_dir, filename) if output_dir else filename
+
+    # Prepare new record
+    new_record = pd.DataFrame([{
+        '날짜': stock_data['date'],
+        '전일종가': stock_data['prev_close'],
+        '시가': stock_data['open'],
+        '종가': stock_data['close'],
+        '최고가': stock_data['high'],
+        '최저가': stock_data['low'],
+        '거래량': stock_data['volume'],
+        '변동가격': stock_data['change'],
+        '변동률(%)': stock_data['change_pct'],
+        '뉴스/이유': news_summary
+    }])
+
+    # Check if file exists
+    if os.path.exists(filepath):
+        # Read existing data
+        existing_df = pd.read_excel(filepath, engine='openpyxl')
+
+        # Check if date already exists
+        if stock_data['date'] in existing_df['날짜'].values:
+            # Update existing record
+            existing_df.loc[existing_df['날짜'] == stock_data['date']] = new_record.iloc[0]
+            df = existing_df
+        else:
+            # Append new record
+            df = pd.concat([existing_df, new_record], ignore_index=True)
+    else:
+        # Create new file
+        df = new_record
+
+    # Sort by date (most recent first)
+    df['날짜'] = pd.to_datetime(df['날짜'])
+    df = df.sort_values('날짜', ascending=False)
+    df['날짜'] = df['날짜'].dt.strftime('%Y-%m-%d')
+
+    # Save to Excel
     df.to_excel(filepath, index=False, engine='openpyxl')
     return filepath
 
