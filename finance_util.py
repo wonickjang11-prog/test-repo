@@ -78,7 +78,7 @@ def calculate_per_for_stocks(stocks_data):
     return pd.DataFrame(results)
 
 
-def export_to_excel(stocks_data, filename='stock_report.xlsx', output_dir=r'd:\목표 invest\1_목표_Inv'):
+def export_to_excel(stocks_data, filename='stock_report.xlsx', output_dir='.'):
     """
     Calculate PER for multiple stocks and export to Excel file.
 
@@ -86,7 +86,7 @@ def export_to_excel(stocks_data, filename='stock_report.xlsx', output_dir=r'd:\�
         stocks_data (list): List of dictionaries containing stock information.
                            Each dictionary should have 'name', 'price', and 'eps' keys.
         filename (str): Output Excel filename (default: 'stock_report.xlsx')
-        output_dir (str): Output directory path (default: 'd:\목표 invest\1_목표_Inv')
+        output_dir (str): Output directory path (default: '.' - current directory)
 
     Returns:
         str: Path to the created Excel file
