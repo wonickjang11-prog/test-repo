@@ -2,6 +2,7 @@
 Finance utility module for calculating financial ratios.
 """
 
+import os
 import pandas as pd
 
 
@@ -77,7 +78,7 @@ def calculate_per_for_stocks(stocks_data):
     return pd.DataFrame(results)
 
 
-def export_to_excel(stocks_data, filename='stock_report.xlsx'):
+def export_to_excel(stocks_data, filename='stock_report.xlsx', output_dir=r'd:\목표 invest\1_목표_Inv'):
     """
     Calculate PER for multiple stocks and export to Excel file.
 
@@ -85,6 +86,7 @@ def export_to_excel(stocks_data, filename='stock_report.xlsx'):
         stocks_data (list): List of dictionaries containing stock information.
                            Each dictionary should have 'name', 'price', and 'eps' keys.
         filename (str): Output Excel filename (default: 'stock_report.xlsx')
+        output_dir (str): Output directory path (default: 'd:\목표 invest\1_목표_Inv')
 
     Returns:
         str: Path to the created Excel file
@@ -93,8 +95,19 @@ def export_to_excel(stocks_data, filename='stock_report.xlsx'):
         ValueError: If stocks_data is empty or has invalid format
     """
     df = calculate_per_for_stocks(stocks_data)
-    df.to_excel(filename, index=False, engine='openpyxl')
-    return filename
+
+    # Create output directory if it doesn't exist
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # Combine directory and filename
+    if output_dir:
+        filepath = os.path.join(output_dir, filename)
+    else:
+        filepath = filename
+
+    df.to_excel(filepath, index=False, engine='openpyxl')
+    return filepath
 
 
 if __name__ == "__main__":
