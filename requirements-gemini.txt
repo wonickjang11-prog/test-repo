@@ -1,0 +1,12 @@
+# Gemini Gem 리서치 추출 도구 의존성
+
+# Selenium 방법 (gemini_export.py)
+selenium>=4.15.0
+webdriver-manager>=4.0.1
+
+# Playwright 방법 (gemini_export_playwright.py) - 권장
+playwright>=1.40.0
+
+# 사용법:
+# pip install -r requirements-gemini.txt
+# playwright install chromium
