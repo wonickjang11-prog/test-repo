@@ -40,6 +40,9 @@ def create_driver():
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
+    options.add_argument("--remote-allow-origins=*")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--ignore-certificate-errors")
     options.add_argument(
         "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
@@ -101,14 +104,20 @@ def scrape_financials(ticker="NVDA", period="quarterly", statement="financials")
     driver = create_driver()
 
     try:
+        # 먼저 간단한 페이지로 연결 테스트
+        print("Chrome 브라우저 연결 테스트 중...")
+        driver.get("https://www.google.com")
+        print(f"Chrome 연결 성공 (title: {driver.title})")
+
+        print(f"재무제표 페이지 로딩 중...")
         driver.get(url)
 
-        # 테이블이 로드될 때까지 대기 (최대 20초)
-        WebDriverWait(driver, 20).until(
+        # 테이블이 로드될 때까지 대기 (최대 30초)
+        WebDriverWait(driver, 30).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "table"))
         )
         # JS 렌더링 완료를 위한 추가 대기
-        time.sleep(2)
+        time.sleep(3)
 
         # 페이지 소스를 BeautifulSoup으로 파싱
         soup = BeautifulSoup(driver.page_source, "html.parser")
@@ -208,7 +217,15 @@ def main():
         print(f"\n완료! 파일이 저장되었습니다.")
 
     except Exception as e:
-        print(f"오류 발생: {e}", file=sys.stderr)
+        error_msg = str(e)
+        print(f"\n오류 발생: {error_msg}", file=sys.stderr)
+        if "Could not reach host" in error_msg or "ERR_" in error_msg:
+            print("\n네트워크 문제 해결 방법:", file=sys.stderr)
+            print("  1. 인터넷 연결 상태를 확인하세요", file=sys.stderr)
+            print("  2. 방화벽/백신 프로그램이 Chrome을 차단하고 있는지 확인하세요", file=sys.stderr)
+            print("  3. VPN을 사용 중이라면 끄고 다시 시도하세요", file=sys.stderr)
+            print("  4. 브라우저에서 직접 URL을 열어보세요:", file=sys.stderr)
+            print(f"     {build_url(args.ticker, args.period, args.statement)}", file=sys.stderr)
         sys.exit(1)
 
 
