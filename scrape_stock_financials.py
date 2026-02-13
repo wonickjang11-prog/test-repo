@@ -104,12 +104,15 @@ def scrape_financials(ticker="NVDA", period="quarterly", statement="financials",
         if not table:
             raise RuntimeError("페이지에서 테이블을 찾을 수 없습니다.")
 
-        # 헤더 추출
+        # 헤더 추출 - thead의 마지막 tr만 사용 (상위 행은 그룹 헤더일 수 있음)
         headers = []
         thead = table.find("thead")
         if thead:
-            for th in thead.find_all("th"):
-                headers.append(th.get_text(strip=True))
+            header_rows = thead.find_all("tr")
+            if header_rows:
+                last_header_row = header_rows[-1]
+                for th in last_header_row.find_all("th"):
+                    headers.append(th.get_text(strip=True))
 
         # 데이터 행 추출
         rows = []
@@ -122,6 +125,15 @@ def scrape_financials(ticker="NVDA", period="quarterly", statement="financials",
 
         if not rows:
             raise RuntimeError("테이블에 데이터가 없습니다.")
+
+        # 헤더와 데이터 열 수가 맞지 않으면 데이터 기준으로 조정
+        num_cols = len(rows[0])
+        if headers and len(headers) != num_cols:
+            print(f"  헤더({len(headers)}개)와 데이터({num_cols}개) 열 수 불일치, 조정 중...")
+            if len(headers) > num_cols:
+                headers = headers[:num_cols]
+            else:
+                headers = headers + [f"Col_{i}" for i in range(len(headers), num_cols)]
 
         df = pd.DataFrame(rows, columns=headers if headers else None)
 
