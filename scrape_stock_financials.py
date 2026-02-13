@@ -49,20 +49,24 @@ def create_driver(headless=True):
     options.add_argument("--ignore-certificate-errors")
 
     try:
+        # Selenium 4.6+ 은 자체 Selenium Manager로 ChromeDriver를 자동 관리
+        driver = webdriver.Chrome(options=options)
+    except Exception as e1:
         try:
+            # 실패 시 webdriver-manager로 재시도
             from webdriver_manager.chrome import ChromeDriverManager
 
             service = Service(ChromeDriverManager().install())
             driver = webdriver.Chrome(service=service, options=options)
-        except ImportError:
-            driver = webdriver.Chrome(options=options)
-    except Exception as e:
-        print(f"\nChrome WebDriver 초기화 실패: {e}")
-        print("\n해결 방법:")
-        print("  1. Chrome 브라우저가 설치되어 있는지 확인하세요")
-        print("  2. 패키지를 업그레이드하세요:")
-        print("     python -m pip install --upgrade selenium webdriver-manager")
-        sys.exit(1)
+        except Exception as e2:
+            print(f"\nChrome WebDriver 초기화 실패:")
+            print(f"  시도 1 (Selenium Manager): {e1}")
+            print(f"  시도 2 (webdriver-manager): {e2}")
+            print("\n해결 방법:")
+            print("  1. Chrome 브라우저가 설치되어 있는지 확인하세요")
+            print("  2. 패키지를 업그레이드하세요:")
+            print("     python -m pip install --upgrade selenium")
+            sys.exit(1)
 
     return driver
 
