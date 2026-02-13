@@ -49,20 +49,24 @@ def create_driver(headless=True):
     options.add_argument("--ignore-certificate-errors")
 
     try:
+        # Selenium 4.6+ 은 자체 Selenium Manager로 ChromeDriver를 자동 관리
+        driver = webdriver.Chrome(options=options)
+    except Exception as e1:
         try:
+            # 실패 시 webdriver-manager로 재시도
             from webdriver_manager.chrome import ChromeDriverManager
 
             service = Service(ChromeDriverManager().install())
             driver = webdriver.Chrome(service=service, options=options)
-        except ImportError:
-            driver = webdriver.Chrome(options=options)
-    except Exception as e:
-        print(f"\nChrome WebDriver 초기화 실패: {e}")
-        print("\n해결 방법:")
-        print("  1. Chrome 브라우저가 설치되어 있는지 확인하세요")
-        print("  2. 패키지를 업그레이드하세요:")
-        print("     python -m pip install --upgrade selenium webdriver-manager")
-        sys.exit(1)
+        except Exception as e2:
+            print(f"\nChrome WebDriver 초기화 실패:")
+            print(f"  시도 1 (Selenium Manager): {e1}")
+            print(f"  시도 2 (webdriver-manager): {e2}")
+            print("\n해결 방법:")
+            print("  1. Chrome 브라우저가 설치되어 있는지 확인하세요")
+            print("  2. 패키지를 업그레이드하세요:")
+            print("     python -m pip install --upgrade selenium")
+            sys.exit(1)
 
     return driver
 
@@ -100,12 +104,15 @@ def scrape_financials(ticker="NVDA", period="quarterly", statement="financials",
         if not table:
             raise RuntimeError("페이지에서 테이블을 찾을 수 없습니다.")
 
-        # 헤더 추출
+        # 헤더 추출 - thead의 마지막 tr만 사용 (상위 행은 그룹 헤더일 수 있음)
         headers = []
         thead = table.find("thead")
         if thead:
-            for th in thead.find_all("th"):
-                headers.append(th.get_text(strip=True))
+            header_rows = thead.find_all("tr")
+            if header_rows:
+                last_header_row = header_rows[-1]
+                for th in last_header_row.find_all("th"):
+                    headers.append(th.get_text(strip=True))
 
         # 데이터 행 추출
         rows = []
@@ -118,6 +125,15 @@ def scrape_financials(ticker="NVDA", period="quarterly", statement="financials",
 
         if not rows:
             raise RuntimeError("테이블에 데이터가 없습니다.")
+
+        # 헤더와 데이터 열 수가 맞지 않으면 데이터 기준으로 조정
+        num_cols = len(rows[0])
+        if headers and len(headers) != num_cols:
+            print(f"  헤더({len(headers)}개)와 데이터({num_cols}개) 열 수 불일치, 조정 중...")
+            if len(headers) > num_cols:
+                headers = headers[:num_cols]
+            else:
+                headers = headers + [f"Col_{i}" for i in range(len(headers), num_cols)]
 
         df = pd.DataFrame(rows, columns=headers if headers else None)
 
