@@ -46,14 +46,24 @@ def create_driver():
     )
 
     try:
-        # webdriver-manager가 설치되어 있으면 자동으로 ChromeDriver를 관리
-        from webdriver_manager.chrome import ChromeDriverManager
+        try:
+            # webdriver-manager가 설치되어 있으면 자동으로 ChromeDriver를 관리
+            from webdriver_manager.chrome import ChromeDriverManager
 
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
-    except ImportError:
-        # webdriver-manager가 없으면 시스템 PATH에서 chromedriver를 찾음
-        driver = webdriver.Chrome(options=options)
+            service = Service(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=options)
+        except ImportError:
+            # webdriver-manager가 없으면 시스템 PATH에서 chromedriver를 찾음
+            driver = webdriver.Chrome(options=options)
+    except Exception as e:
+        print(f"\nChrome WebDriver 초기화 실패: {e}")
+        print("\n해결 방법:")
+        print("  1. Chrome 브라우저가 설치되어 있는지 확인하세요")
+        print("  2. 패키지를 업그레이드하세요:")
+        print("     pip install --upgrade selenium webdriver-manager")
+        print("  3. numpy/numexpr 오류가 있다면:")
+        print("     pip install --upgrade numpy numexpr pandas")
+        sys.exit(1)
 
     return driver
 
