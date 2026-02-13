@@ -9,6 +9,7 @@ CSV 및 Excel 파일로 저장합니다.
     python scrape_stock_financials.py --ticker AAPL      # AAPL 분기별
     python scrape_stock_financials.py --period annual    # NVDA 연간
     python scrape_stock_financials.py --output my_data   # 출력 파일명 지정
+    python scrape_stock_financials.py --visible          # Chrome 창 보이게 실행
 
 필수 패키지:
     pip install selenium beautifulsoup4 pandas openpyxl
@@ -32,75 +33,67 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 
-def create_driver():
-    """헤드리스 Chrome WebDriver를 생성합니다."""
+def create_driver(headless=True):
+    """Chrome WebDriver를 생성합니다."""
     options = Options()
-    options.add_argument("--headless=new")
+
+    if headless:
+        options.add_argument("--headless=new")
+
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
-    options.add_argument(
-        "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-    )
+    options.add_argument("--remote-allow-origins=*")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--ignore-certificate-errors")
 
     try:
-        # webdriver-manager가 설치되어 있으면 자동으로 ChromeDriver를 관리
-        from webdriver_manager.chrome import ChromeDriverManager
+        try:
+            from webdriver_manager.chrome import ChromeDriverManager
 
-        service = Service(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=options)
-    except ImportError:
-        # webdriver-manager가 없으면 시스템 PATH에서 chromedriver를 찾음
-        driver = webdriver.Chrome(options=options)
+            service = Service(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=options)
+        except ImportError:
+            driver = webdriver.Chrome(options=options)
+    except Exception as e:
+        print(f"\nChrome WebDriver 초기화 실패: {e}")
+        print("\n해결 방법:")
+        print("  1. Chrome 브라우저가 설치되어 있는지 확인하세요")
+        print("  2. 패키지를 업그레이드하세요:")
+        print("     python -m pip install --upgrade selenium webdriver-manager")
+        sys.exit(1)
 
     return driver
 
 
 def build_url(ticker, period="quarterly", statement="financials"):
-    """StockAnalysis URL을 생성합니다.
-
-    Args:
-        ticker: 주식 티커 (예: 'NVDA')
-        period: 'quarterly' 또는 'annual'
-        statement: 'financials' (Income Statement),
-                   'balance-sheet', 'cash-flow-statement'
-    """
+    """StockAnalysis URL을 생성합니다."""
     base = f"https://stockanalysis.com/stocks/{ticker.lower()}/{statement}/"
     if period == "quarterly":
         base += "?p=quarterly"
     return base
 
 
-def scrape_financials(ticker="NVDA", period="quarterly", statement="financials"):
-    """StockAnalysis.com에서 재무제표 테이블을 스크래핑합니다.
-
-    Args:
-        ticker: 주식 티커 심볼
-        period: 'quarterly' 또는 'annual'
-        statement: 재무제표 종류
-
-    Returns:
-        pandas.DataFrame: 재무제표 데이터
-    """
+def scrape_financials(ticker="NVDA", period="quarterly", statement="financials",
+                      headless=True):
+    """StockAnalysis.com에서 재무제표 테이블을 스크래핑합니다."""
     url = build_url(ticker, period, statement)
     print(f"URL: {url}")
-    print(f"데이터를 가져오는 중...")
+    print(f"데이터를 가져오는 중... (headless={headless})")
 
-    driver = create_driver()
+    driver = create_driver(headless=headless)
 
     try:
         driver.get(url)
+        print(f"페이지 로딩 중... (최대 30초 대기)")
 
-        # 테이블이 로드될 때까지 대기 (최대 20초)
-        WebDriverWait(driver, 20).until(
+        # 테이블이 로드될 때까지 대기
+        WebDriverWait(driver, 30).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "table"))
         )
-        # JS 렌더링 완료를 위한 추가 대기
-        time.sleep(2)
+        time.sleep(3)
 
-        # 페이지 소스를 BeautifulSoup으로 파싱
         soup = BeautifulSoup(driver.page_source, "html.parser")
         table = soup.find("table")
 
@@ -126,11 +119,8 @@ def scrape_financials(ticker="NVDA", period="quarterly", statement="financials")
         if not rows:
             raise RuntimeError("테이블에 데이터가 없습니다.")
 
-        # DataFrame 생성
-        # 첫 번째 헤더는 행 라벨(metric name), 나머지는 기간(분기/연도)
         df = pd.DataFrame(rows, columns=headers if headers else None)
 
-        # 첫 번째 열을 인덱스로 설정 (metric 이름)
         if not df.empty and len(df.columns) > 0:
             df = df.set_index(df.columns[0])
 
@@ -183,11 +173,17 @@ def main():
     parser.add_argument(
         "--print", dest="print_table", action="store_true", help="결과를 터미널에 출력"
     )
+    parser.add_argument(
+        "--visible", action="store_true",
+        help="Chrome 창을 보이게 실행 (headless 모드 끔)"
+    )
 
     args = parser.parse_args()
+    headless = not args.visible
 
     try:
-        df = scrape_financials(args.ticker, args.period, args.statement)
+        df = scrape_financials(args.ticker, args.period, args.statement,
+                               headless=headless)
 
         if args.print_table:
             print("\n" + "=" * 80)
@@ -198,7 +194,14 @@ def main():
         print(f"\n완료! 파일이 저장되었습니다.")
 
     except Exception as e:
-        print(f"오류 발생: {e}", file=sys.stderr)
+        error_msg = str(e)
+        print(f"\n오류 발생: {error_msg}", file=sys.stderr)
+        if "Could not reach host" in error_msg or "ERR_" in error_msg:
+            print("\n네트워크 문제 해결 방법:", file=sys.stderr)
+            print("  1. --visible 옵션으로 다시 시도하세요:", file=sys.stderr)
+            print(f"     python scrape_stock_financials.py --visible", file=sys.stderr)
+            print("  2. 방화벽/백신이 Chrome을 차단하는지 확인하세요", file=sys.stderr)
+            print("  3. VPN을 사용 중이라면 끄고 다시 시도하세요", file=sys.stderr)
         sys.exit(1)
 
 
