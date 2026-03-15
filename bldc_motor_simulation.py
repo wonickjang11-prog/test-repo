@@ -96,7 +96,7 @@ class BLDCMotorSimulator:
 
     def get_hall_signals(self, theta_e: float) -> Tuple[int, int, int]:
         """
-        홀 센서 신호 생성 (120도 간격)
+        홀 센서 신호 생성 (역기전력 정류 섹터 경계 30, 90, 150, 210, 270, 330도에 배치)
 
         Args:
             theta_e: 전기각 (rad)
@@ -106,14 +106,14 @@ class BLDCMotorSimulator:
         """
         theta = theta_e % (2 * np.pi)
 
-        # 홀 센서 A (0 ~ 180도에서 High)
-        H1 = 1 if 0 <= theta < np.pi else 0
+        # 홀 센서 H1: 30 ~ 210도에서 High
+        H1 = 1 if np.pi / 6 <= theta < 7 * np.pi / 6 else 0
 
-        # 홀 센서 B (120도 지연, 60 ~ 240도에서 High)
-        H2 = 1 if np.pi / 3 <= theta < 4 * np.pi / 3 else 0
+        # 홀 센서 H2: 150 ~ 330도에서 High
+        H2 = 1 if 5 * np.pi / 6 <= theta < 11 * np.pi / 6 else 0
 
-        # 홀 센서 C (240도 지연, 180 ~ 360도에서 High)
-        H3 = 1 if 2 * np.pi / 3 <= theta < 5 * np.pi / 3 else 0
+        # 홀 센서 H3: 270 ~ 90도에서 High (0도 기준으로 래핑)
+        H3 = 1 if (theta >= 3 * np.pi / 2 or theta < np.pi / 2) else 0
 
         return H1, H2, H3
 
@@ -127,13 +127,14 @@ class BLDCMotorSimulator:
         hall_state = (H1 << 2) | (H2 << 1) | H3
 
         # 홀 센서 상태 -> 정류 상태 매핑
+        # 섹터:  330-30  30-90   90-150  150-210  210-270  270-330
         commutation_table = {
-            0b101: 1,  # A+ B-
-            0b100: 2,  # A+ C-
-            0b110: 3,  # B+ C-
-            0b010: 4,  # B+ A-
-            0b011: 5,  # C+ A-
-            0b001: 6,  # C+ B-
+            0b001: 1,  # C+ B-  (330~30도)
+            0b101: 2,  # A+ B-  (30~90도)
+            0b100: 3,  # A+ C-  (90~150도)
+            0b110: 4,  # B+ C-  (150~210도)
+            0b010: 5,  # B+ A-  (210~270도)
+            0b011: 6,  # C+ A-  (270~330도)
         }
 
         return commutation_table.get(hall_state, 0)
@@ -149,14 +150,15 @@ class BLDCMotorSimulator:
         Returns:
             (V_a, V_b, V_c): 3상 전압
         """
-        # 정류 상태별 스위칭 패턴
+        # 정류 상태별 스위칭 패턴 (중성점 기준 상전압: ±Vdc/2)
+        Vh = Vdc / 2
         voltage_patterns = {
-            1: (Vdc, -Vdc, 0),      # A+ B-
-            2: (Vdc, 0, -Vdc),      # A+ C-
-            3: (0, Vdc, -Vdc),      # B+ C-
-            4: (-Vdc, Vdc, 0),      # B+ A-
-            5: (-Vdc, 0, Vdc),      # C+ A-
-            6: (0, -Vdc, Vdc),      # C+ B-
+            1: (0, -Vh, Vh),        # C+ B-  (330~30도)
+            2: (Vh, -Vh, 0),        # A+ B-  (30~90도)
+            3: (Vh, 0, -Vh),        # A+ C-  (90~150도)
+            4: (0, Vh, -Vh),        # B+ C-  (150~210도)
+            5: (-Vh, Vh, 0),        # B+ A-  (210~270도)
+            6: (-Vh, 0, Vh),        # C+ A-  (270~330도)
         }
 
         return voltage_patterns.get(comm_state, (0, 0, 0))
@@ -230,11 +232,14 @@ class BLDCMotorSimulator:
             self.i_b += di_b * dt
             self.i_c += di_c * dt
 
-            # 전자기 토크 계산 (T_e = Kt * (e_a*i_a + e_b*i_b + e_c*i_c) / omega)
-            if abs(self.omega) > 0.1:
-                T_e = (e_a * self.i_a + e_b * self.i_b + e_c * self.i_c) / self.omega
-            else:
-                T_e = p.Kt * (self.i_a + self.i_b + self.i_c)
+            # 전자기 토크 계산: T_e = Ke * p * (fa*ia + fb*ib + fc*ic)
+            # 역기전력 파형 함수값(normalized) 직접 사용 → omega=0에서도 유효
+            fa = self.trapezoidal_bemf(self.theta_e)
+            fb = self.trapezoidal_bemf(self.theta_e - 2 * np.pi / 3)
+            fc = self.trapezoidal_bemf(self.theta_e + 2 * np.pi / 3)
+            T_e = p.Ke * p.pole_pairs * (
+                fa * self.i_a + fb * self.i_b + fc * self.i_c
+            )
 
             # 기계적 동역학 (J * dω/dt = T_e - B*ω - T_load)
             domega = (T_e - p.B * self.omega - T_load) / p.J
