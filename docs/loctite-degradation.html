@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>왜 록타이트는 고온에서 실패하는가</title>
+<style>
+  :root{
+    --paper:#F3EEE4;
+    --panel:#FBF8F1;
+    --panel-2:#EEE7D6;
+    --ink:#211D17;
+    --ink-soft:#6E6759;
+    --ink-faint:#9C947F;
+    --rule:#DCD1B8;
+    --cold:#1C6C86;
+    --mid:#C88A22;
+    --hot:#C23A16;
+    --char:#3B2A22;
+    --char-soft:#6b5647;
+    --metal-al:#A9AEB2;
+    --metal-steel:#6E6D68;
+    --shadow: rgba(33,29,23,0.10);
+    --focus: #1C6C86;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --paper:#141210;
+      --panel:#1C1915;
+      --panel-2:#252019;
+      --ink:#EFE9DC;
+      --ink-soft:#B0A791;
+      --ink-faint:#7C7461;
+      --rule:#332C22;
+      --cold:#4C9FB8;
+      --mid:#E3AE45;
+      --hot:#E2592E;
+      --char:#8a7362;
+      --char-soft:#a8907c;
+      --metal-al:#8A9095;
+      --metal-steel:#5B594F;
+      --shadow: rgba(0,0,0,0.45);
+      --focus: #4C9FB8;
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#141210;
+    --panel:#1C1915;
+    --panel-2:#252019;
+    --ink:#EFE9DC;
+    --ink-soft:#B0A791;
+    --ink-faint:#7C7461;
+    --rule:#332C22;
+    --cold:#4C9FB8;
+    --mid:#E3AE45;
+    --hot:#E2592E;
+    --char:#8a7362;
+    --char-soft:#a8907c;
+    --metal-al:#8A9095;
+    --metal-steel:#5B594F;
+    --shadow: rgba(0,0,0,0.45);
+    --focus: #4C9FB8;
+  }
+  :root[data-theme="light"]{
+    --paper:#F3EEE4;
+    --panel:#FBF8F1;
+    --panel-2:#EEE7D6;
+    --ink:#211D17;
+    --ink-soft:#6E6759;
+    --ink-faint:#9C947F;
+    --rule:#DCD1B8;
+    --cold:#1C6C86;
+    --mid:#C88A22;
+    --hot:#C23A16;
+    --char:#3B2A22;
+    --char-soft:#6b5647;
+    --metal-al:#A9AEB2;
+    --metal-steel:#6E6D68;
+    --shadow: rgba(33,29,23,0.10);
+    --focus: #1C6C86;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Segoe UI","Noto Sans KR",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  .mono{
+    font-family:ui-monospace,"SFMono-Regular","Cascadia Code",Menlo,Consolas,"Noto Sans Mono CJK KR",monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  main{max-width:800px;margin:0 auto;padding:0 24px 96px;}
+
+  /* ---------- Header ---------- */
+  .head{padding:56px 0 28px;}
+  .eyebrow{
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:12px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--ink-faint);
+    margin:0 0 14px;
+  }
+  h1{
+    font-size:clamp(28px,4.4vw,42px);
+    line-height:1.18;
+    font-weight:800;
+    letter-spacing:-0.02em;
+    margin:0 0 16px;
+    text-wrap:balance;
+    color:var(--ink);
+  }
+  .head p{
+    font-size:16px;
+    line-height:1.7;
+    color:var(--ink-soft);
+    max-width:62ch;
+    margin:0;
+  }
+
+  /* ---------- Control strip ---------- */
+  .control-strip{
+    position:sticky;
+    top:0;
+    z-index:20;
+    background:color-mix(in srgb, var(--paper) 88%, transparent);
+    backdrop-filter:blur(10px);
+    -webkit-backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--rule);
+    padding:14px 0;
+    margin-bottom:8px;
+  }
+  .control-inner{
+    display:flex;
+    align-items:center;
+    gap:18px;
+    flex-wrap:wrap;
+  }
+  .temp-readout{
+    display:flex;
+    align-items:baseline;
+    gap:6px;
+    min-width:118px;
+  }
+  .temp-readout .val{
+    font-size:28px;
+    font-weight:700;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    color:var(--hot-current, var(--ink));
+    transition:color .15s ease;
+  }
+  .temp-readout .unit{font-size:15px;color:var(--ink-faint);}
+  .slider-wrap{flex:1;min-width:200px;display:flex;flex-direction:column;gap:6px;}
+  input[type=range]{
+    -webkit-appearance:none;
+    appearance:none;
+    width:100%;
+    height:8px;
+    border-radius:5px;
+    background:linear-gradient(90deg, var(--cold), var(--mid) 62%, var(--hot) 100%);
+    outline:none;
+    cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;
+    width:20px;height:20px;border-radius:50%;
+    background:var(--panel);
+    border:3px solid var(--ink);
+    cursor:grab;
+    box-shadow:0 1px 4px var(--shadow);
+  }
+  input[type=range]:focus-visible::-webkit-slider-thumb{
+    outline:2px solid var(--focus);
+    outline-offset:2px;
+  }
+  input[type=range]::-moz-range-thumb{
+    width:20px;height:20px;border-radius:50%;
+    background:var(--panel);
+    border:3px solid var(--ink);
+    cursor:grab;
+  }
+  .slider-ticks{
+    display:flex;justify-content:space-between;
+    font-size:11px;color:var(--ink-faint);
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+  }
+  .phase-chip{
+    padding:7px 13px;
+    border-radius:999px;
+    font-size:13px;
+    font-weight:600;
+    white-space:nowrap;
+    border:1px solid var(--rule);
+    background:var(--panel);
+    transition:border-color .2s ease, color .2s ease;
+  }
+  .damage-wrap{
+    display:flex;align-items:center;gap:8px;
+    font-size:12px;color:var(--ink-faint);
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+  }
+  .damage-bar{
+    width:84px;height:7px;border-radius:4px;
+    background:var(--panel-2);
+    overflow:hidden;
+    border:1px solid var(--rule);
+  }
+  .damage-fill{
+    height:100%;
+    width:0%;
+    background:var(--char);
+    transition:width .3s ease;
+  }
+  .reset-btn{
+    border:1px solid var(--rule);
+    background:var(--panel);
+    color:var(--ink-soft);
+    font-size:12px;
+    padding:6px 11px;
+    border-radius:7px;
+    cursor:pointer;
+    font-family:inherit;
+  }
+  .reset-btn:hover{color:var(--ink); border-color:var(--ink-faint);}
+  .reset-btn:focus-visible{outline:2px solid var(--focus); outline-offset:2px;}
+
+  /* ---------- Panels ---------- */
+  .panel{
+    padding:44px 0 8px;
+    border-bottom:1px solid var(--rule);
+  }
+  .panel:last-of-type{border-bottom:none;}
+  .panel-label{
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:12px;
+    color:var(--ink-faint);
+    letter-spacing:.08em;
+    margin:0 0 8px;
+  }
+  .panel h2{
+    font-size:23px;
+    font-weight:800;
+    letter-spacing:-0.01em;
+    margin:0 0 14px;
+    text-wrap:balance;
+  }
+  .panel p{
+    font-size:15.5px;
+    line-height:1.75;
+    color:var(--ink-soft);
+    max-width:64ch;
+    margin:0 0 12px;
+  }
+  .panel p:last-of-type{margin-bottom:22px;}
+  .callout{
+    font-size:14px;
+    line-height:1.7;
+    color:var(--ink);
+    background:var(--panel);
+    border:1px solid var(--rule);
+    border-left:3px solid var(--char-soft);
+    padding:13px 16px;
+    border-radius:6px;
+    margin:0 0 22px;
+    max-width:64ch;
+  }
+
+  .diagram-frame{
+    background:var(--panel);
+    border:1px solid var(--rule);
+    border-radius:10px;
+    padding:18px;
+    box-shadow:0 1px 3px var(--shadow);
+  }
+  canvas{display:block;width:100%;height:280px;border-radius:6px;}
+  .legend{
+    display:flex;gap:18px;flex-wrap:wrap;
+    margin-top:12px;
+    font-size:12px;color:var(--ink-faint);
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+  }
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .swatch{width:11px;height:11px;border-radius:3px;display:inline-block;}
+
+  /* ---------- CTE diagram ---------- */
+  .cte-diagram{display:flex;gap:28px;align-items:center;flex-wrap:wrap;justify-content:center;padding:8px 0 4px;}
+  .cte-svg{width:220px;height:220px;}
+  .cte-readout{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;color:var(--ink-soft);line-height:2;min-width:200px;}
+  .cte-readout .k{color:var(--ink-faint);}
+  .cte-readout .v{color:var(--ink);font-weight:600;}
+  .scale-note{font-size:11px;color:var(--ink-faint);margin-top:6px;}
+
+  /* ---------- Hydrolysis diagram ---------- */
+  .hydro-stage{display:flex;gap:20px;align-items:center;justify-content:center;flex-wrap:wrap;padding:14px 0;}
+  .hydro-svg{width:280px;height:120px;}
+  .hydro-arrow{font-size:22px;color:var(--ink-faint);}
+  .hydro-label{
+    text-align:center;font-size:12px;color:var(--ink-faint);
+    font-family:ui-monospace,Menlo,Consolas,monospace;margin-top:8px;
+  }
+
+  /* ---------- Summary ---------- */
+  .summary{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+    gap:1px;
+    background:var(--rule);
+    border:1px solid var(--rule);
+    border-radius:10px;
+    overflow:hidden;
+    margin:26px 0 12px;
+  }
+  .summary .cell{
+    background:var(--panel);
+    padding:18px 16px;
+  }
+  .summary .cell .num{
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    font-size:22px;font-weight:700;color:var(--ink);
+    display:block;margin-bottom:4px;
+  }
+  .summary .cell .lbl{font-size:12px;color:var(--ink-faint);line-height:1.5;}
+
+  footer{
+    padding:32px 0 0;
+    font-size:12px;
+    color:var(--ink-faint);
+    line-height:1.7;
+    border-top:1px solid var(--rule);
+    margin-top:8px;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+<main>
+
+  <div class="head">
+    <p class="eyebrow">재료공학 노트 · EGR 밸브 냉각수 실링</p>
+    <h1>왜 록타이트는 고온에서 실패하는가</h1>
+    <p>슬라이더로 온도를 올려 보세요. 가교 고분자 네트워크가 어떻게 끊어지고, 그 손상이 왜 되돌릴 수 없는지, 그리고 그 잔류물이 왜 사후 침투형 접착제를 막아서는지를 확인할 수 있습니다.</p>
+  </div>
+
+  <div class="control-strip">
+    <div class="control-inner">
+      <div class="temp-readout">
+        <span class="val mono" id="tempVal">25</span><span class="unit">°C</span>
+      </div>
+      <div class="slider-wrap">
+        <input type="range" id="tempSlider" min="25" max="220" value="25" step="1" aria-label="온도 조절">
+        <div class="slider-ticks">
+          <span>25</span><span>130</span><span>180 (한계)</span><span>220°C</span>
+        </div>
+      </div>
+      <div class="phase-chip mono" id="phaseChip">안정 (Stable)</div>
+      <div class="damage-wrap">
+        <span>누적 열손상</span>
+        <div class="damage-bar"><div class="damage-fill" id="damageFill"></div></div>
+        <span id="damagePct">0%</span>
+        <button class="reset-btn" id="resetBtn">시편 초기화</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel 1: Thermal oxidation network -->
+  <section class="panel">
+    <p class="panel-label">01 / 열산화 · 사슬 절단</p>
+    <h2>가교 고분자 네트워크의 붕괴</h2>
+    <p>록타이트 648은 경화되며 메타크릴레이트 단량체가 3차원 그물망(가교 구조)으로 연결된 열경화성 수지가 됩니다. 180°C를 넘어서면 이 그물망의 결합이 열산화로 끊어지기 시작합니다(사슬 절단). 아래 격자는 이 가교망을 단순화한 모형입니다 — 온도를 180°C 위로 올려 보세요.</p>
+    <div class="callout" id="networkCallout">현재 25°C — 모든 결합이 온전합니다. 격자가 유지된 상태로 탄성을 발휘합니다.</div>
+    <div class="diagram-frame">
+      <canvas id="netCanvas"></canvas>
+      <div class="legend">
+        <span><i class="swatch" style="background:var(--cold)"></i>온전한 가교 결합</span>
+        <span><i class="swatch" style="background:var(--char)"></i>절단 · 탄화 잔류물</span>
+      </div>
+    </div>
+    <p style="margin-top:18px;">열경화성 수지는 열가소성 플라스틱과 달리 다시 녹지 않습니다. 한 번 끊어진 결합은 <strong style="color:var(--ink)">탄화된 찌꺼기로 그 자리에 그대로 남습니다</strong> — 온도를 다시 낮춰도 회복되지 않습니다. 이 잔류물이 18mm 조립부 틈새를 물리적으로 막아, 사후에 침투형 접착제를 도포해도 모세관 경로가 열리지 않는 근본 이유입니다.</p>
+  </section>
+
+  <!-- Panel 2: CTE mismatch -->
+  <section class="panel">
+    <p class="panel-label">02 / 이종 소재 열팽창 불일치</p>
+    <h2>알루미늄과 강철이 다르게 팽창한다</h2>
+    <p>알루미늄 하우징(CTE 약 21~24 µm/m·°C)은 강철 튜브(CTE 약 11~13 µm/m·°C)보다 거의 두 배 빠르게 팽창합니다. 온도가 오르면 하우징이 더 크게 벌어지며 접착 계면에 방사형 간극과 전단 응력이 발생합니다.</p>
+    <div class="diagram-frame">
+      <div class="cte-diagram">
+        <svg class="cte-svg" id="cteSvg" viewBox="0 0 220 220">
+          <circle id="alRing" cx="110" cy="110" r="95" fill="none" stroke="var(--metal-al)" stroke-width="16"/>
+          <circle id="gapRing" cx="110" cy="110" r="78" fill="none" stroke-width="10" stroke-dasharray="2 4"/>
+          <circle id="steelRing" cx="110" cy="110" r="58" fill="var(--metal-steel)"/>
+          <text x="110" y="114" text-anchor="middle" class="mono" font-size="11" fill="var(--panel)">STEEL</text>
+        </svg>
+        <div class="cte-readout mono">
+          <div><span class="k">하우징(Al)</span> <span class="v" id="alExpand">기준 치수</span></div>
+          <div><span class="k">튜브(Steel)</span> <span class="v" id="steelExpand">기준 치수</span></div>
+          <div><span class="k">계면 상태</span> <span class="v" id="cteState">밀착</span></div>
+          <div class="scale-note">* 개념도, 실제 축척이 아님</div>
+        </div>
+      </div>
+    </div>
+    <p style="margin-top:18px;">시동·정지가 반복될 때마다 이 간극은 벌어졌다 좁혀지기를 반복합니다(열 사이클링). 이미 취성화된 접착제는 이 미세 움직임을 흡수하지 못하고 미세 균열이 생깁니다 — 냉각수가 스며드는 첫 관문입니다.</p>
+  </section>
+
+  <!-- Panel 3: Hydrolysis -->
+  <section class="panel">
+    <p class="panel-label">03 / 냉각수에 의한 가수분해</p>
+    <h2>미세 균열로 스며든 글리콜이 사슬을 끊는다</h2>
+    <p>미세 균열이 열리면 물·에틸렌글리콜 냉각수가 침투합니다. 혐기성 아크릴 수지의 에스테르 결합은 고온의 극성 용매에서 가수분해되어 카르복실산과 알코올로 분해됩니다 — 수지가 진흙처럼 붕괴됩니다.</p>
+    <div class="diagram-frame">
+      <div class="hydro-stage">
+        <svg class="hydro-svg" viewBox="0 0 280 120">
+          <line x1="20" y1="60" x2="90" y2="60" stroke="var(--ink)" stroke-width="3"/>
+          <circle cx="105" cy="60" r="15" fill="none" stroke="var(--ink)" stroke-width="3"/>
+          <text x="105" y="65" text-anchor="middle" font-size="11" class="mono" fill="var(--ink)">C=O</text>
+          <line x1="120" y1="60" x2="160" y2="60" stroke="var(--ink)" stroke-width="3"/>
+          <text x="140" y="50" text-anchor="middle" font-size="10" class="mono" fill="var(--ink-faint)">O</text>
+          <line x1="175" y1="60" x2="245" y2="60" stroke="var(--ink)" stroke-width="3"/>
+          <text x="45" y="45" text-anchor="middle" font-size="11" class="mono" fill="var(--ink-faint)">에스테르 결합 (온전)</text>
+        </svg>
+        <div class="hydro-arrow mono" id="hydroArrow">→</div>
+        <svg class="hydro-svg" viewBox="0 0 280 120">
+          <line x1="20" y1="60" x2="90" y2="60" stroke="var(--ink)" stroke-width="3"/>
+          <circle cx="105" cy="60" r="15" fill="none" stroke="var(--hot-c, var(--hot))" stroke-width="3" id="cohCircle"/>
+          <text x="105" y="65" text-anchor="middle" font-size="10" class="mono" fill="var(--ink)">COOH</text>
+          <circle cx="150" cy="35" r="9" fill="none" stroke="var(--cold)" stroke-width="2" id="waterMol" opacity="0"/>
+          <text x="150" y="39" text-anchor="middle" font-size="8" class="mono" fill="var(--cold)" id="waterLabel" opacity="0">H₂O</text>
+          <line x1="175" y1="60" x2="245" y2="60" stroke="var(--ink)" stroke-width="3" id="hoChain"/>
+          <text x="205" y="50" text-anchor="middle" font-size="10" class="mono" fill="var(--ink-faint)" id="hoLabel">HO—</text>
+          <text x="150" y="100" text-anchor="middle" font-size="11" class="mono" fill="var(--ink-faint)">사슬 분해 (가수분해)</text>
+        </svg>
+      </div>
+      <div class="hydro-label" id="hydroStatus">현재 균열이 없어 냉각수 접촉이 시작되지 않았습니다.</div>
+    </div>
+  </section>
+
+  <div class="summary">
+    <div class="cell"><span class="num mono">180°C</span><span class="lbl">록타이트 648 권장 최대 사용 온도</span></div>
+    <div class="cell"><span class="num mono">21–24 / 11–13</span><span class="lbl">Al / Steel CTE (µm/m·°C)</span></div>
+    <div class="cell"><span class="num mono">56%</span><span class="lbl">294, 87°C 냉각수 5,000h 후 강도 유지율</span></div>
+    <div class="cell"><span class="num mono">0회</span><span class="lbl">열경화 수지가 재용융되는 횟수</span></div>
+  </div>
+
+  <footer>
+    이 페이지는 EGR 밸브 냉각수 누수 분석 보고서(2장·3장·5장)에서 다룬 열산화 사슬 절단, CTE 불일치, 가수분해 메커니즘을 개념적으로 시각화한 것입니다. 수치와 축척은 설명을 위한 근사치이며 실제 실험 데이터를 대체하지 않습니다.
+  </footer>
+
+</main>
+
+<script>
+(function(){
+  "use strict";
+  var slider = document.getElementById('tempSlider');
+  var tempVal = document.getElementById('tempVal');
+  var phaseChip = document.getElementById('phaseChip');
+  var damageFill = document.getElementById('damageFill');
+  var damagePct = document.getElementById('damagePct');
+  var resetBtn = document.getElementById('resetBtn');
+  var networkCallout = document.getElementById('networkCallout');
+  var canvas = document.getElementById('netCanvas');
+  var ctx = canvas.getContext('2d');
+
+  var alExpand = document.getElementById('alExpand');
+  var steelExpand = document.getElementById('steelExpand');
+  var cteState = document.getElementById('cteState');
+  var gapRing = document.getElementById('gapRing');
+
+  var hydroStatus = document.getElementById('hydroStatus');
+  var waterMol = document.getElementById('waterMol');
+  var waterLabel = document.getElementById('waterLabel');
+  var cohCircle = document.getElementById('cohCircle');
+  var hoChain = document.getElementById('hoChain');
+  var hoLabel = document.getElementById('hoLabel');
+
+  var temp = 25;
+  var damage = 0; // 0..1, monotonic
+  var DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+  function themeColor(name){
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+  function hexToRgb(hex){
+    hex = hex.replace('#','');
+    if(hex.length===3){ hex = hex.split('').map(function(c){return c+c;}).join(''); }
+    var num = parseInt(hex,16);
+    return {r:(num>>16)&255, g:(num>>8)&255, b:num&255};
+  }
+  function lerp(a,b,t){ return a+(b-a)*t; }
+  function lerpColor(c1,c2,t){
+    var a=hexToRgb(c1), b=hexToRgb(c2);
+    return 'rgb('+Math.round(lerp(a.r,b.r,t))+','+Math.round(lerp(a.g,b.g,t))+','+Math.round(lerp(a.b,b.b,t))+')';
+  }
+  function tempToColor(t){
+    var cold=themeColor('--cold'), mid=themeColor('--mid'), hot=themeColor('--hot');
+    if(t<=130) return cold;
+    if(t<=180){ return lerpColor(cold, mid, (t-130)/50); }
+    return lerpColor(mid, hot, Math.min(1,(t-180)/40));
+  }
+
+  function phaseInfo(t){
+    if(t<130) return {label:'안정 (Stable)', color: themeColor('--cold')};
+    if(t<180) return {label:'연화 시작 (Softening)', color: themeColor('--mid')};
+    if(t<200) return {label:'산화 · 사슬절단 진행', color: themeColor('--hot')};
+    return {label:'취성 파괴 (Embrittlement)', color: themeColor('--hot')};
+  }
+
+  // ---------- Network simulation ----------
+  var nodes = [], edges = [], particles = [];
+  var cols=10, rows=5;
+  function buildGrid(w,h){
+    nodes = []; edges = []; particles = [];
+    var padX = w*0.06, padY = h*0.12;
+    var gw = w - padX*2, gh = h - padY*2;
+    var rand = mulberry32(42);
+    for(var r=0;r<rows;r++){
+      for(var c=0;c<cols;c++){
+        var jx = (rand()-0.5)*gw/cols*0.35;
+        var jy = (rand()-0.5)*gh/rows*0.35;
+        nodes.push({
+          x: padX + c*gw/(cols-1) + jx,
+          y: padY + r*gh/(rows-1) + jy,
+          i: r*cols+c
+        });
+      }
+    }
+    function idx(r,c){ return r*cols+c; }
+    for(var r2=0;r2<rows;r2++){
+      for(var c2=0;c2<cols;c2++){
+        if(c2<cols-1) edges.push({a:idx(r2,c2), b:idx(r2,c2+1), broken:false, breakAt:null});
+        if(r2<rows-1) edges.push({a:idx(r2,c2), b:idx(r2+1,c2), broken:false, breakAt:null});
+        if(r2<rows-1 && c2<cols-1 && rand()>0.55) edges.push({a:idx(r2,c2), b:idx(r2+1,c2+1), broken:false, breakAt:null});
+      }
+    }
+  }
+  function mulberry32(a){
+    return function(){
+      a |= 0; a = (a + 0x6D2B79F5) | 0;
+      var t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function resizeCanvas(){
+    var rect = canvas.getBoundingClientRect();
+    var w = rect.width, h = 280;
+    canvas.width = w*DPR; canvas.height = h*DPR;
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    buildGrid(w,h);
+  }
+
+  var lastT = performance.now();
+  function stepNetwork(dt){
+    // damage accrues only above 180C, monotonic
+    if(temp>180){
+      var rate = (temp-180)/40; // 0..1
+      damage = Math.min(1, damage + rate*dt*0.10);
+    }
+    // break edges probabilistically as damage rises
+    var targetBroken = Math.round(damage*edges.length*0.82);
+    var brokenCount = 0;
+    for(var i=0;i<edges.length;i++){ if(edges[i].broken) brokenCount++; }
+    if(brokenCount < targetBroken){
+      var need = targetBroken - brokenCount;
+      var tries = 0;
+      while(need>0 && tries<40){
+        var e = edges[(Math.random()*edges.length)|0];
+        if(!e.broken){
+          e.broken = true;
+          var na = nodes[e.a], nb = nodes[e.b];
+          particles.push({
+            x:(na.x+nb.x)/2, y:(na.y+nb.y)/2,
+            vx:(Math.random()-0.5)*8, vy: Math.random()*10+4,
+            life:1
+          });
+          need--;
+        }
+        tries++;
+      }
+    }
+    for(var p=particles.length-1;p>=0;p--){
+      var pt = particles[p];
+      pt.x += pt.vx*dt; pt.y += pt.vy*dt; pt.vy += 14*dt;
+      pt.life -= dt*0.6;
+      if(pt.life<=0) particles.splice(p,1);
+    }
+  }
+
+  function drawNetwork(){
+    var rect = canvas.getBoundingClientRect();
+    var w = rect.width, h = 280;
+    ctx.clearRect(0,0,w,h);
+    var liveColor = tempToColor(temp);
+    var charColor = themeColor('--char');
+    var charSoft = themeColor('--char-soft');
+
+    // edges
+    for(var i=0;i<edges.length;i++){
+      var e = edges[i];
+      var na = nodes[e.a], nb = nodes[e.b];
+      if(e.broken){
+        ctx.strokeStyle = charColor;
+        ctx.lineWidth = 1.6;
+        var stub = 0.22;
+        ctx.beginPath();
+        ctx.moveTo(na.x, na.y);
+        ctx.lineTo(lerp(na.x,nb.x,stub), lerp(na.y,nb.y,stub));
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(nb.x, nb.y);
+        ctx.lineTo(lerp(nb.x,na.x,stub), lerp(nb.y,na.y,stub));
+        ctx.stroke();
+      } else {
+        ctx.strokeStyle = liveColor;
+        ctx.globalAlpha = 0.85;
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(na.x, na.y);
+        ctx.lineTo(nb.x, nb.y);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+    // nodes
+    for(var j=0;j<nodes.length;j++){
+      var n = nodes[j];
+      var connectedBroken = 0, connectedTotal = 0;
+      for(var k=0;k<edges.length;k++){
+        if(edges[k].a===j || edges[k].b===j){
+          connectedTotal++;
+          if(edges[k].broken) connectedBroken++;
+        }
+      }
+      var frac = connectedTotal? connectedBroken/connectedTotal : 0;
+      ctx.fillStyle = frac>0.5 ? charSoft : liveColor;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, frac>0.5?2.4:3.2, 0, Math.PI*2);
+      ctx.fill();
+    }
+    // particles (char debris)
+    for(var p2=0;p2<particles.length;p2++){
+      var pt = particles[p2];
+      ctx.globalAlpha = Math.max(0,pt.life);
+      ctx.fillStyle = charColor;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 1.6, 0, Math.PI*2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function updateNetworkCallout(){
+    var brokenCount = edges.filter(function(e){return e.broken;}).length;
+    var pct = Math.round((brokenCount/edges.length)*100);
+    if(pct===0){
+      networkCallout.textContent = '현재 '+Math.round(temp)+'°C — 모든 결합이 온전합니다. 격자가 유지된 상태로 탄성을 발휘합니다.';
+    } else if(temp<=180 && pct<100){
+      networkCallout.textContent = '누적 손상 '+pct+'% — 이전에 180°C를 초과한 이력이 있어 결합이 끊어진 채 남아 있습니다. 지금 온도를 낮춰도 회복되지 않습니다.';
+    } else {
+      networkCallout.textContent = '결합 손상 '+pct+'% — 산화로 끊어진 가교가 탄화 잔류물로 남아 틈새를 메우고 있습니다. 이 상태는 비가역적입니다.';
+    }
+  }
+
+  // ---------- CTE diagram ----------
+  function updateCTE(){
+    var dT = temp-25;
+    var alGrowth = dT*22.5; // µm/m·°C nominal
+    var steelGrowth = dT*12;
+    alExpand.textContent = '+'+alGrowth.toFixed(0)+' µm/m';
+    steelExpand.textContent = '+'+steelGrowth.toFixed(0)+' µm/m';
+    var t = Math.min(1, dT/195);
+    var alR = 95 + t*7;
+    var steelR = 58 + t*2.4;
+    document.getElementById('alRing').setAttribute('r', alR.toFixed(1));
+    document.getElementById('steelRing').setAttribute('r', steelR.toFixed(1));
+    var gapR = (alR+steelR)/2 - 3;
+    gapRing.setAttribute('r', gapR.toFixed(1));
+    gapRing.setAttribute('stroke', tempToColor(temp));
+    if(damage>0.15){
+      gapRing.setAttribute('stroke-dasharray', '1 3');
+      cteState.textContent = '미세 균열 발생';
+      cteState.style.color = themeColor('--hot');
+    } else if(temp>150){
+      cteState.textContent = '간극 확대';
+      cteState.style.color = themeColor('--mid');
+    } else {
+      cteState.textContent = '밀착';
+      cteState.style.color = '';
+    }
+  }
+
+  // ---------- Hydrolysis diagram ----------
+  function updateHydrolysis(){
+    var expose = damage; // 0..1
+    waterMol.setAttribute('opacity', expose>0.1 ? Math.min(1,expose*1.4) : 0);
+    waterLabel.setAttribute('opacity', expose>0.1 ? Math.min(1,expose*1.4) : 0);
+    var hot = themeColor('--hot');
+    cohCircle.setAttribute('stroke', expose>0.1 ? hot : themeColor('--ink'));
+    hoChain.setAttribute('stroke-dasharray', expose>0.3 ? '4 3' : 'none');
+    hoChain.setAttribute('opacity', expose>0.3 ? 1-Math.min(0.6,expose*0.5) : 1);
+    hoLabel.textContent = expose>0.3 ? 'HO— (분해됨)' : 'HO—';
+    if(expose<0.1){
+      hydroStatus.textContent = '현재 균열이 없어 냉각수 접촉이 시작되지 않았습니다.';
+    } else if(expose<0.5){
+      hydroStatus.textContent = '미세 균열을 통해 냉각수(H₂O/글리콜)가 스며들기 시작했습니다.';
+    } else {
+      hydroStatus.textContent = '에스테르 결합이 가수분해되어 카르복실산과 알코올로 분해되고 있습니다.';
+    }
+  }
+
+  function updateChrome(){
+    tempVal.textContent = Math.round(temp);
+    var ph = phaseInfo(temp);
+    phaseChip.textContent = ph.label;
+    phaseChip.style.color = ph.color;
+    phaseChip.style.borderColor = ph.color;
+    damageFill.style.width = (damage*100).toFixed(0)+'%';
+    damagePct.textContent = Math.round(damage*100)+'%';
+    document.documentElement.style.setProperty('--hot-current', ph.color);
+  }
+
+  function frame(now){
+    var dt = Math.min(0.05, (now-lastT)/1000);
+    lastT = now;
+    stepNetwork(dt);
+    drawNetwork();
+    updateNetworkCallout();
+    updateCTE();
+    updateHydrolysis();
+    updateChrome();
+    requestAnimationFrame(frame);
+  }
+
+  slider.addEventListener('input', function(){
+    temp = parseFloat(slider.value);
+  });
+  resetBtn.addEventListener('click', function(){
+    damage = 0;
+    slider.value = 25;
+    temp = 25;
+    buildGrid(canvas.getBoundingClientRect().width, 280);
+  });
+  window.addEventListener('resize', resizeCanvas);
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(){});
+
+  resizeCanvas();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
